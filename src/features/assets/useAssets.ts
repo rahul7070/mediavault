@@ -1,24 +1,35 @@
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { listAssets, ApiError } from '@/api/client';
-import type { Asset, AssetPage, AssetQuery } from '@/lib/types';
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { listAssets, ApiError } from "@/api/client";
+import type { Asset, AssetPage, AssetQuery } from "@/lib/types";
 
-interface UseAssetsOptions extends Omit<AssetQuery, 'cursor'> {
+interface UseAssetsOptions extends Omit<AssetQuery, "cursor"> {
   enabled?: boolean;
 }
 
 export function useAssets(options: UseAssetsOptions) {
-  const { q, status, kind, tag, collectionId, owner, sort, limit = 36, enabled = true } = options;
+  const {
+    q,
+    status,
+    kind,
+    tag,
+    collectionId,
+    owner,
+    sort,
+    limit = 36,
+    enabled = true,
+  } = options;
 
   const queryKey = [
-    'assets',
+    "assets",
     {
       q: q?.trim() || undefined,
-      status: status && status.length > 0 ? [...status].sort().join(',') : undefined,
-      kind: kind && kind.length > 0 ? [...kind].sort().join(',') : undefined,
-      tag: tag && tag.length > 0 ? [...tag].sort().join(',') : undefined,
+      status:
+        status && status.length > 0 ? [...status].sort().join(",") : undefined,
+      kind: kind && kind.length > 0 ? [...kind].sort().join(",") : undefined,
+      tag: tag && tag.length > 0 ? [...tag].sort().join(",") : undefined,
       collectionId: collectionId || undefined,
       owner: owner || undefined,
-      sort: sort || 'updatedAt:desc',
+      sort: sort || "updatedAt:desc",
       limit,
     },
   ] as const;
@@ -54,6 +65,11 @@ export function useAssets(options: UseAssetsOptions) {
 
   const total = infiniteQuery.data?.pages[0]?.total ?? 0;
 
+  const isAbortError =
+    (infiniteQuery.error instanceof DOMException &&
+      infiniteQuery.error.name === "AbortError") ||
+    infiniteQuery.error?.message?.includes("aborted");
+
   return {
     items,
     total,
@@ -62,8 +78,8 @@ export function useAssets(options: UseAssetsOptions) {
     isFetchingNextPage: infiniteQuery.isFetchingNextPage,
     hasNextPage: Boolean(infiniteQuery.hasNextPage),
     fetchNextPage: infiniteQuery.fetchNextPage,
-    isError: infiniteQuery.isError,
-    error: infiniteQuery.error,
+    isError: infiniteQuery.isError && !isAbortError,
+    error: isAbortError ? null : infiniteQuery.error,
     refetch: infiniteQuery.refetch,
   };
 }

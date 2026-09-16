@@ -1,7 +1,7 @@
-import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { AssetCard } from './AssetCard';
-import type { Asset } from '@/lib/types';
+import { useRef, useState, useEffect, useCallback, useMemo } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { AssetCard } from "./AssetCard";
+import type { Asset } from "@/lib/types";
 
 interface Props {
   assets: Asset[];
@@ -48,7 +48,10 @@ export function AssetGrid({
       for (const entry of entries) {
         const width = entry.contentRect.width;
         if (width > 0) {
-          const calculated = Math.max(1, Math.floor((width + GAP) / (CARD_MIN_WIDTH + GAP)));
+          const calculated = Math.max(
+            1,
+            Math.floor((width + GAP) / (CARD_MIN_WIDTH + GAP)),
+          );
           setColumns(calculated);
         }
       }
@@ -77,7 +80,13 @@ export function AssetGrid({
     if (lastItem.index >= rowCount - 2 && hasNextPage && !isFetchingNextPage) {
       onFetchNextPage();
     }
-  }, [virtualItems, rowCount, hasNextPage, isFetchingNextPage, onFetchNextPage]);
+  }, [
+    virtualItems,
+    rowCount,
+    hasNextPage,
+    isFetchingNextPage,
+    onFetchNextPage,
+  ]);
 
   // Keep focusedIndex in bounds
   useEffect(() => {
@@ -94,31 +103,31 @@ export function AssetGrid({
       let nextIndex = focusedIndex;
 
       switch (e.key) {
-        case 'ArrowRight':
+        case "ArrowRight":
           nextIndex = Math.min(assets.length - 1, focusedIndex + 1);
           break;
-        case 'ArrowLeft':
+        case "ArrowLeft":
           nextIndex = Math.max(0, focusedIndex - 1);
           break;
-        case 'ArrowDown':
+        case "ArrowDown":
           nextIndex = Math.min(assets.length - 1, focusedIndex + columns);
           break;
-        case 'ArrowUp':
+        case "ArrowUp":
           nextIndex = Math.max(0, focusedIndex - columns);
           break;
-        case 'Home':
+        case "Home":
           nextIndex = 0;
           break;
-        case 'End':
+        case "End":
           nextIndex = assets.length - 1;
           break;
-        case ' ': // Space toggles selection
+        case " ": // Space toggles selection
           e.preventDefault();
           if (assets[focusedIndex]) {
             onToggleSelect(assets[focusedIndex].id, e.shiftKey);
           }
           return;
-        case 'Enter': // Enter opens detail
+        case "Enter": // Enter opens detail
           e.preventDefault();
           if (assets[focusedIndex]) {
             onOpen(assets[focusedIndex].id);
@@ -140,7 +149,7 @@ export function AssetGrid({
 
         // Ensure row is in virtual view
         const targetRow = Math.floor(nextIndex / columns);
-        rowVirtualizer.scrollToIndex(targetRow, { align: 'auto' });
+        rowVirtualizer.scrollToIndex(targetRow, { align: "auto" });
       }
     },
     [assets, focusedIndex, columns, onToggleSelect, onOpen, rowVirtualizer],
@@ -155,8 +164,14 @@ export function AssetGrid({
         {Array.from({ length: 12 }).map((_, i) => (
           <div key={i} className="card-skeleton">
             <div className="card-skeleton__thumb shimmer" />
-            <div className="card-skeleton__line shimmer" style={{ width: '80%' }} />
-            <div className="card-skeleton__line shimmer" style={{ width: '50%' }} />
+            <div
+              className="card-skeleton__line shimmer"
+              style={{ width: "80%" }}
+            />
+            <div
+              className="card-skeleton__line shimmer"
+              style={{ width: "50%" }}
+            />
           </div>
         ))}
       </div>
@@ -164,12 +179,21 @@ export function AssetGrid({
   }
 
   // Error state on initial fetch
-  if (error && assets.length === 0) {
+  const isAbort =
+    error &&
+    (error.name === "AbortError" ||
+      error.message?.toLowerCase().includes("abort"));
+  if (error && !isAbort && assets.length === 0) {
     return (
       <div className="empty empty--error" role="alert">
-        <div className="empty__icon" aria-hidden="true">⚠️</div>
+        <div className="empty__icon" aria-hidden="true">
+          ⚠️
+        </div>
         <h3>Unable to load assets</h3>
-        <p className="muted">{error.message || 'A network error occurred while reaching the server.'}</p>
+        <p className="muted">
+          {error.message ||
+            "A network error occurred while reaching the server."}
+        </p>
         <button type="button" className="btn btn--primary" onClick={onRetry}>
           Try again
         </button>
@@ -181,11 +205,20 @@ export function AssetGrid({
   if (assets.length === 0) {
     return (
       <div className="empty" role="status">
-        <div className="empty__icon" aria-hidden="true">🔍</div>
+        <div className="empty__icon" aria-hidden="true">
+          🔍
+        </div>
         <h3>No assets found</h3>
-        <p className="muted">Try adjusting your keywords, expanding filters, or resetting your search.</p>
+        <p className="muted">
+          Try adjusting your keywords, expanding filters, or resetting your
+          search.
+        </p>
         {onResetFilters && (
-          <button type="button" className="btn btn--subtle" onClick={onResetFilters}>
+          <button
+            type="button"
+            className="btn btn--subtle"
+            onClick={onResetFilters}
+          >
             Clear all filters
           </button>
         )}
@@ -207,8 +240,8 @@ export function AssetGrid({
         className="virtual-inner"
         style={{
           height: `${rowVirtualizer.getTotalSize()}px`,
-          width: '100%',
-          position: 'relative',
+          width: "100%",
+          position: "relative",
         }}
       >
         {virtualItems.map((virtualRow) => {
@@ -221,12 +254,12 @@ export function AssetGrid({
               data-index={virtualRow.index}
               className="virtual-row"
               style={{
-                position: 'absolute',
+                position: "absolute",
                 top: 0,
                 left: 0,
-                width: '100%',
+                width: "100%",
                 transform: `translateY(${virtualRow.start}px)`,
-                display: 'grid',
+                display: "grid",
                 gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
                 gap: `${GAP}px`,
               }}

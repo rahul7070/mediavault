@@ -36,38 +36,74 @@ export function AssetGrid({
   onResetFilters,
 }: Props) {
   const parentRef = useRef<HTMLDivElement | null>(null);
-  const [columns, setColumns] = useState(3);
+  const [columns, setColumns] = useState(() => {
+    if (typeof window !== "undefined") {
+      return Math.max(
+        1,
+        Math.floor((window.innerWidth - 40 + GAP) / (CARD_MIN_WIDTH + GAP)),
+      );
+    }
+    return 4;
+  });
+  const [containerWidth, setContainerWidth] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.innerWidth - 40;
+    }
+    return 1000;
+  });
+  const observerRef = useRef<ResizeObserver | null>(null);
   const [focusedIndex, setFocusedIndex] = useState(0);
 
-  // Responsive column calculation
-  useEffect(() => {
-    const el = parentRef.current;
-    if (!el) return;
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const width = entry.contentRect.width;
+  // Responsive column and width calculation via callback ref
+  const containerRef = useCallback((node: HTMLDivElement | null) => {
+    parentRef.current = node;
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+    if (node) {
+      const update = (width: number) => {
         if (width > 0) {
+          setContainerWidth(width);
           const calculated = Math.max(
             1,
             Math.floor((width + GAP) / (CARD_MIN_WIDTH + GAP)),
           );
           setColumns(calculated);
         }
-      }
-    });
+      };
 
-    observer.observe(el);
-    return () => observer.disconnect();
+      update(node.clientWidth);
+
+      const obs = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          update(entry.contentRect.width);
+        }
+      });
+      obs.observe(node);
+      observerRef.current = obs;
+    }
   }, []);
+
+  const cardWidth =
+    containerWidth > 0 && columns > 0
+      ? (containerWidth - (columns - 1) * GAP) / columns
+      : CARD_MIN_WIDTH;
+
+  // 16:10 aspect ratio for thumbnail + 115px for card body, tags, status badge, and borders
+  const estimatedRowHeight = Math.max(
+    260,
+    Math.round((cardWidth * 10) / 16 + 115),
+  );
 
   const rowCount = Math.ceil(assets.length / columns);
 
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 280,
+    estimateSize: () => estimatedRowHeight,
     overscan: 4,
+    gap: GAP,
   });
 
   const virtualItems = rowVirtualizer.getVirtualItems();
@@ -228,7 +264,7 @@ export function AssetGrid({
 
   return (
     <div
-      ref={parentRef}
+      ref={containerRef}
       className="grid-container"
       tabIndex={0}
       role="grid"
@@ -251,6 +287,7 @@ export function AssetGrid({
           return (
             <div
               key={virtualRow.key}
+              ref={rowVirtualizer.measureElement}
               data-index={virtualRow.index}
               className="virtual-row"
               style={{

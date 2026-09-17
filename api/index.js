@@ -10,7 +10,7 @@ function ensureServer() {
     serverPromise = import('../server/index.mjs')
       .then(() => new Promise((resolve) => setTimeout(resolve, 100)))
       .catch((err) => {
-        // If port is already in use (e.g. in local dev), server is already up
+        // If port is already in use (e.g. in local dev or warm container), server is already up
         if (err?.code === 'EADDRINUSE') {
           return;
         }
@@ -30,13 +30,34 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Determine the target path:
+  // In Vercel, when a rewrite like "/api/:path*" -> "/api" is triggered,
+  // req.headers['x-matched-path'] carries the original requested path (e.g. "/api/assets/a_07993").
+  let targetPath =
+    req.headers['x-matched-path'] ||
+    req.headers['x-vercel-matched-path'] ||
+    req.url ||
+    '/api';
+
+  // If targetPath is just "/api" or does not contain the subpath from req.url
+  if (targetPath === '/api' || targetPath === '/api/') {
+    if (req.url && req.url !== '/api' && req.url !== '/api/') {
+      targetPath = req.url;
+    }
+  }
+
+  // Preserve query parameters if present on req.url but missing on targetPath
+  const queryIndex = (req.url || '').indexOf('?');
+  if (queryIndex !== -1 && !targetPath.includes('?')) {
+    targetPath += req.url.slice(queryIndex);
+  }
+
   // Ensure request URL starts with /api
-  let targetPath = req.url || '/';
   if (!targetPath.startsWith('/api')) {
     targetPath = '/api' + (targetPath.startsWith('/') ? targetPath : '/' + targetPath);
   }
 
-  // Forward the request to the internal server
+  // Forward the request to the internal mock server
   const proxyReq = http.request(
     {
       hostname: '127.0.0.1',

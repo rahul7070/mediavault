@@ -141,10 +141,30 @@ Optimized for an internal brand team reviewing hundreds of media assets under fa
 
 ---
 
+---
+
+## Bonus & Optional Tracks Implemented
+
+1. **Offline Write Queueing & Auto-Sync (Task 4 Bonus):**
+   - Mutations performed while offline (both single-card edits in `AssetDetail` and multi-item operations in `applyBulkStatus`) update the UI optimistically and are safely stored in a persistent `localStorage` mutation queue.
+   - A reactive topbar badge (`N pending sync`) alerts the user to pending changes.
+   - When connection is restored (`window.onLine`), the queue automatically flushes with bounded concurrency, updates query caches, and announces the successful sync via screen reader live regions.
+2. **Non-Blocking `/api/stats` Header (Optional Track):**
+   - Built into `<LibraryStats />` (`src/features/header/LibraryStats.tsx`).
+   - The endpoint's synthetic >1.1s latency is decoupled from the main thread via TanStack Query (`staleTime: 60s`).
+   - Renders a fixed-height skeleton loader that prevents Cumulative Layout Shift (CLS), smoothly popping in library volume metrics (12,400 assets, 2.0 TB storage, and approved counts) without blocking grid interaction.
+3. **Live SSE Updates with Conflict Protection (Optional Track):**
+   - Implemented via `useAssetEvents` (`src/hooks/useAssetEvents.ts`) connecting to `GET /api/events`.
+   - Incoming `asset.updated` events are merged in-place into query pages, keeping array lengths and virtual scroll indices completely undisturbed (0 scroll jumps).
+   - Local edit protection: Server updates for the asset actively open in the detail panel or currently selected in the bulk bar are ignored to prevent clobbering in-progress reviewer workflows.
+   - Displays a real-time `Live sync` indicator in the topbar.
+
+---
+
 ## Trade-offs and cuts
 
-- **Queued offline writes:** While offline detection and request pausing are fully implemented, persistent offline write queueing in IndexedDB was cut to focus on data virtualization, keyboard accessibility, and concurrency correctness.
 - **Marquee drag-to-select:** Replaced with standard OS-style Click + Shift+Click and Shift+Arrow range selection, which is snappier and easier to navigate with assistive tech.
+- **Persistent IndexedDB vs LocalStorage:** Used `localStorage` for offline mutation queueing rather than IndexedDB to avoid adding bulky external dependencies and keep the gzipped bundle under budget (76 kB).
 
 ---
 

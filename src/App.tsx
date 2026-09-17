@@ -1,12 +1,14 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient, type InfiniteData } from '@tanstack/react-query';
-import { bulkSetStatusChunked } from '@/api/client';
+import { bulkSetStatusChunked, updateAsset } from '@/api/client';
 import { useSearchFilters } from '@/hooks/useSearchFilters';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useAssetEvents } from '@/hooks/useAssetEvents';
 import { useAssets } from '@/features/assets/useAssets';
 import { AssetGrid } from '@/features/assets/AssetGrid';
 import { AssetDetail } from '@/features/assets/AssetDetail';
+import { LibraryStats } from '@/features/header/LibraryStats';
+import { getOfflineQueue, enqueueMutation, removeMutation } from '@/lib/offlineQueue';
 import { BulkActionBar } from '@/components/BulkActionBar';
 import { NotificationToast, type ToastNotice } from '@/components/NotificationToast';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -63,15 +65,28 @@ function MediaVaultDashboard() {
   const isOnline = useNetworkStatus();
   const { announce } = useAnnouncer();
   const client = useQueryClient();
-
-  // Listen for real-time SSE updates
-  useAssetEvents();
-
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
   const [notices, setNotices] = useState<ToastNotice[]>([]);
+  const [pendingQueueCount, setPendingQueueCount] = useState<number>(() => getOfflineQueue().length);
+
+  // Listen for real-time SSE updates with collision protection and live status indicator
+  const { status: sseStatus } = useAssetEvents({
+    activeAssetId: activeId,
+    selectedIds,
+  });
+
+  // Keep pending queue counter reactively updated
+  useEffect(() => {
+    const handleQueueChange = (e: Event) => {
+      const custom = e as CustomEvent<number>;
+      setPendingQueueCount(typeof custom.detail === 'number' ? custom.detail : getOfflineQueue().length);
+    };
+    window.addEventListener('offline_queue_changed', handleQueueChange);
+    return () => window.removeEventListener('offline_queue_changed', handleQueueChange);
+  }, []);
 
   // Ref to track element that opened the detail panel so we can restore focus upon close
   const lastActiveTriggerRef = useRef<HTMLElement | null>(null);
@@ -103,6 +118,56 @@ function MediaVaultDashboard() {
   const dismissNotice = useCallback((id: string) => {
     setNotices((prev) => prev.filter((n) => n.id !== id));
   }, []);
+
+  // Flush offline queue when reconnected with bounded execution
+  const flushOfflineQueue = useCallback(async () => {
+    const queue = getOfflineQueue();
+    if (queue.length === 0 || !navigator.onLine) return;
+
+    let synced = 0;
+    for (const item of queue) {
+      try {
+        if (item.type === 'single_patch') {
+          const updated = await updateAsset(item.assetId, item.version, item.patch);
+          client.setQueriesData<InfiniteData<AssetPage>>({ queryKey: ['assets'] }, (oldData) => {
+            if (!oldData) return oldData;
+            return {
+              ...oldData,
+              pages: oldData.pages.map((p) => ({
+                ...p,
+                items: p.items.map((a) => (a.id === updated.id ? updated : a)),
+              })),
+            };
+          });
+          removeMutation(item.id);
+          synced++;
+        } else if (item.type === 'bulk_status') {
+          const result = await bulkSetStatusChunked(item.assetIds, item.targetStatus);
+          removeMutation(item.id);
+          synced += result.applied;
+        }
+      } catch {
+        // If conflict or unprocessable error, remove to prevent retry loop
+        removeMutation(item.id);
+      }
+    }
+
+    if (synced > 0) {
+      addNotice({
+        type: 'success',
+        title: 'Offline changes synchronized',
+        description: `Successfully synchronized ${synced} queued change${synced > 1 ? 's' : ''} to the server.`,
+      });
+      announce(`Back online: synchronized ${synced} queued changes to server.`);
+    }
+  }, [client, addNotice, announce]);
+
+  // Flush queue whenever connection is restored
+  useEffect(() => {
+    if (isOnline) {
+      flushOfflineQueue();
+    }
+  }, [isOnline, flushOfflineQueue]);
 
   // Selection handling with Shift+Click Range Selection
   const handleToggleSelect = useCallback(
@@ -223,6 +288,24 @@ function MediaVaultDashboard() {
 
       announce(`Applying ${statusLabel(targetStatus)} to ${idsToUpdate.length} assets…`);
 
+      // If currently offline, queue mutations locally and return early
+      if (!isOnline) {
+        enqueueMutation({
+          type: 'bulk_status',
+          assetIds: idsToUpdate,
+          targetStatus,
+        });
+        setIsBulkProcessing(false);
+        if (!explicitIds) setSelectedIds(new Set());
+        addNotice({
+          type: 'warning',
+          title: 'Offline: Changes queued',
+          description: `Applied ${statusLabel(targetStatus)} to ${idsToUpdate.length} asset${idsToUpdate.length > 1 ? 's' : ''} locally. Will automatically synchronize when connection returns.`,
+        });
+        announce(`Offline: ${idsToUpdate.length} assets queued for synchronization.`);
+        return;
+      }
+
       try {
         const result = await bulkSetStatusChunked(idsToUpdate, targetStatus);
 
@@ -322,7 +405,9 @@ function MediaVaultDashboard() {
       {!isOnline && (
         <div className="offline-banner" role="alert">
           <span className="offline-banner__icon" aria-hidden="true">⚡</span>
-          <span>You are currently offline. Changes will resume when connection is restored.</span>
+          <span>
+            You are currently offline. Changes are saved locally and will synchronize automatically when connection is restored.
+          </span>
         </div>
       )}
 
@@ -335,6 +420,8 @@ function MediaVaultDashboard() {
           </div>
           <h1>MediaVault</h1>
         </div>
+
+        <LibraryStats />
 
         <div className="topbar__search-wrap">
           <svg className="search-icon" viewBox="0 0 20 20" width="16" height="16" fill="currentColor" aria-hidden="true">
@@ -361,20 +448,44 @@ function MediaVaultDashboard() {
           )}
         </div>
 
-        <div className="topbar__sort-wrap">
-          <label htmlFor="sort-select" className="sr-only">Sort assets</label>
-          <select
-            id="sort-select"
-            className="select select--sort"
-            value={sort}
-            onChange={(e) => setSort(e.target.value as NonNullable<AssetQuery['sort']>)}
+        <div className="topbar__actions">
+          {pendingQueueCount > 0 && (
+            <div
+              className="queue-badge"
+              role="status"
+              title={`${pendingQueueCount} offline mutation${pendingQueueCount > 1 ? 's' : ''} stored locally awaiting sync`}
+            >
+              <span className="queue-badge__dot" aria-hidden="true" />
+              <span>{pendingQueueCount} pending sync</span>
+            </div>
+          )}
+
+          <div
+            className={`live-badge live-badge--${sseStatus}`}
+            title={`Server-Sent Events: ${sseStatus === 'connected' ? 'Live stream active' : sseStatus === 'connecting' ? 'Connecting to live events…' : 'Offline / disconnected'}`}
+            role="status"
           >
-            {SORTS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            <span className="live-badge__dot" aria-hidden="true" />
+            <span className="live-badge__text">
+              {sseStatus === 'connected' ? 'Live sync' : sseStatus === 'connecting' ? 'Connecting…' : 'Live paused'}
+            </span>
+          </div>
+
+          <div className="topbar__sort-wrap">
+            <label htmlFor="sort-select" className="sr-only">Sort assets</label>
+            <select
+              id="sort-select"
+              className="select select--sort"
+              value={sort}
+              onChange={(e) => setSort(e.target.value as NonNullable<AssetQuery['sort']>)}
+            >
+              {SORTS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </header>
 

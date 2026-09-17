@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { getAsset, thumbnailUrl, updateAsset, ApiError } from '@/api/client';
+import { enqueueMutation } from '@/lib/offlineQueue';
 import { formatBytes, formatDate, formatDuration, statusLabel } from '@/lib/format';
 import type { Asset, AssetStatus } from '@/lib/types';
 
@@ -86,6 +87,17 @@ export function AssetDetail({ id, onClose, onSaved }: Props) {
       };
       setAsset(optimisticAsset);
       onSaved(optimisticAsset);
+
+      if (!navigator.onLine) {
+        enqueueMutation({
+          type: 'single_patch',
+          assetId: asset.id,
+          version: targetVersion,
+          patch: { status: nextStatus },
+        });
+        setSaving(false);
+        return;
+      }
 
       try {
         const updated = await updateAsset(asset.id, targetVersion, { status: nextStatus });

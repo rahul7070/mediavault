@@ -104,11 +104,11 @@ npm run build
 
 | Metric | Before | After | How measured |
 |---|---|---|---|
-| Rendered DOM nodes at 5,000 rows loaded | ~25,000+ nodes (browser stuttering) | **36–48 card nodes** | Chrome DevTools Elements panel & `document.querySelectorAll('.card').length` |
+| Rendered DOM nodes at 5,000 rows loaded | ~25,000+ nodes (browser stuttering) | **40–60 card nodes** | Chrome DevTools Elements panel & `document.querySelectorAll('.card').length` |
 | Cards re-rendered when toggling one selection | All rendered cards (~100%) | **Exactly 1 card** | React DevTools Profiler ("Highlight updates when components render") |
 | Longest task during sustained scroll | 142 ms (janky frames) | **12 ms** (smooth 60fps) | Chrome DevTools Performance panel scroll recording |
 | Requests fired while typing a 6-character query | 6+ parallel requests (triggered 429) | **1 request** | Chrome DevTools Network panel |
-| Production bundle, gzipped | 48 kB baseline | **74.87 kB JS + 3.99 kB CSS** | `vite build` gzipped output |
+| Production bundle, gzipped | 48 kB baseline | **76.54 kB JS + 4.37 kB CSS** | `npm run build` gzipped output |
 
 **What was the actual bottleneck, and how did you find it?**
 1. **Unbounded DOM & Layout Thrashing:** In the baseline, loading pages continuously mounted DOM elements. At 500+ items, calculating layout on scroll caused heavy main-thread tasks (>100ms). Solved via `@tanstack/react-virtual`.

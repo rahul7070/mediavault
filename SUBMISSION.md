@@ -4,7 +4,7 @@
 
 Paste your Loom (or equivalent) link here. 5–10 minutes.
 
-**Video Link:** `[Insert Loom / Screen Recording Video Link Here]`
+**Video Link:** https://vimeo.com/1227942313
 **Deployed Link:** https://mediavault-eta.vercel.app
 
 ---

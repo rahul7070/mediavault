@@ -4,8 +4,9 @@
 
 Paste your Loom (or equivalent) link here. 5–10 minutes.
 
-**Video Link:** https://vimeo.com/1227942313
+**Repository Link:** https://github.com/rahul7070/mediavault
 **Deployed Link:** https://mediavault-eta.vercel.app
+**Video Link:** https://vimeo.com/1227942313
 
 ---
 
